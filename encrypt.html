@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Encrypt Document - QR Encryptor</title>
+    <link rel="stylesheet" href="../css/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">🔐 QR Encryptor</div>
+            <ul class="nav-links">
+                <li><a href="../index.html">Home</a></li>
+                <li><a href="encrypt.html" class="active">Encrypt</a></li>
+                <li><a href="decrypt.html">Decrypt</a></li>
+                <li><a href="about.html">About</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="page-container">
+        <div class="container">
+            <div id="alert" class="alert"></div>
+
+            <!-- Encryption Form -->
+            <div class="form-section">
+                <h2>📄 Encrypt Your Document</h2>
+                <p style="color: #666; margin-bottom: 1.5rem;">Upload a file and set a password to encrypt it into a QR
+                    code.</p>
+
+                <form id="encryptForm">
+                    <!-- File Upload -->
+                    <div class="form-group">
+                        <label>Select Document</label>
+                        <div class="file-input-wrapper">
+                            <input type="file" id="fileInput" required>
+                            <label for="fileInput" class="file-input-label">
+                                <span>📁</span>
+                                <span>Click or drag to upload (Max 1MB)</span>
+                            </label>
+                        </div>
+                        <div id="fileName" class="file-name"></div>
+                    </div>
+
+                    <!-- Password -->
+                    <div class="form-group">
+                        <label for="password">Set Encryption Password</label>
+                        <input type="password" id="password" placeholder="Enter a strong password" required>
+                        <small style="color: #666;">Use at least 8 characters with numbers and symbols</small>
+                    </div>
+
+                    <!-- Confirm Password -->
+                    <div class="form-group">
+                        <label for="confirmPassword">Confirm Password</label>
+                        <input type="password" id="confirmPassword" placeholder="Confirm password" required>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">
+                        🔐 Encrypt & Generate QR Code
+                    </button>
+                </form>
+            </div>
+
+            <!-- Result Section -->
+            <div id="resultSection" class="result-section">
+                <h2>✅ Encryption Successful!</h2>
+                <p style="color: #666; margin-bottom: 1rem;">Your document has been encrypted. Share this QR code to
+                    allow others to download the file.</p>
+
+                <div class="qr-container">
+                    <div id="qrCode" style="display: flex; justify-content: center;"></div>
+                </div>
+
+                <div class="button-group">
+                    <button onclick="encryptor.downloadQRCode()" class="btn btn-primary btn-small">
+                        ⬇️ Download QR Code
+                    </button>
+                    <button onclick="copyQRLink()" class="btn btn-secondary btn-small">
+                        📋 Copy Link
+                    </button>
+                    <button onclick="location.reload()" class="btn btn-secondary btn-small">
+                        🔄 Encrypt Another
+                    </button>
+                </div>
+
+                <div id="fileInfo" style="margin-top: 2rem; padding: 1rem; background: #f0f7ff; border-radius: 8px;">
+                    <p><strong>File Information:</strong></p>
+                    <p id="infoText" style="color: #666;"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>&copy; 2026 QR Document Encryptor. All rights reserved.</p>
+    </footer>
+
+    <script src="../js/encryption.js"></script>
+    <script>
+        let encryptedQRData = '';
+
+        // Handle file input
+        document.getElementById('fileInput').addEventListener('change', function (e) {
+            const fileName = e.target.files[0]?.name || 'No file selected';
+            document.getElementById('fileName').textContent = '✓ ' + fileName;
+        });
+
+        // Drag and drop
+        const fileInputWrapper = document.querySelector('.file-input-wrapper');
+        fileInputWrapper.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            fileInputWrapper.style.backgroundColor = '#e8f0ff';
+        });
+
+        fileInputWrapper.addEventListener('dragleave', () => {
+            fileInputWrapper.style.backgroundColor = 'transparent';
+        });
+
+        fileInputWrapper.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const files = e.dataTransfer.files;
+            document.getElementById('fileInput').files = files;
+            const fileName = files[0]?.name || 'No file selected';
+            document.getElementById('fileName').textContent = '✓ ' + fileName;
+        });
+
+        // Form submission
+        document.getElementById('encryptForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const file = document.getElementById('fileInput').files[0];
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+
+            // Validation
+            if (!file) {
+                encryptor.showAlert('Please select a file', 'error');
+                return;
+            }
+
+            if (file.size > 1 * 1024 * 1024) {
+                encryptor.showAlert('File size exceeds 1MB limit', 'error');
+                return;
+            }
+
+            if (password.length < 8) {
+                encryptor.showAlert('Password must be at least 8 characters', 'error');
+                return;
+            }
+
+            if (password !== confirmPassword) {
+                encryptor.showAlert('Passwords do not match', 'error');
+                return;
+            }
+
+            // Show loading
+            const btn = e.target.querySelector('button[type="submit"]');
+            const originalText = btn.textContent;
+            btn.textContent = '⏳ Encrypting...';
+            btn.disabled = true;
+
+            try {
+                // Encrypt file
+                btn.textContent = '⏳ Encrypting...';
+                const encryptedData = await encryptor.encryptFile(file, password);
+
+                // Upload to cloud storage
+                btn.textContent = '⏳ Uploading to Secure Cloud...';
+                const binId = await encryptor.uploadEncryptedPayload(encryptedData);
+
+                // Generate shareable URL
+                const baseUrl = window.location.href.split('?')[0];
+                const decryptUrl = baseUrl.replace('encrypt.html', 'decrypt.html') + '?bin=' + binId;
+
+                encryptedQRData = decryptUrl;
+
+                // Clear previous QR code
+                document.getElementById('qrCode').innerHTML = '';
+
+                // Generate QR code with the URL instead of the heavy payload
+                await encryptor.generateQRCode(decryptUrl);
+
+                // Show result
+                document.getElementById('resultSection').classList.add('show');
+
+                // Show file info
+                document.getElementById('infoText').innerHTML = `
+                    <strong>File:</strong> ${file.name}<br>
+                    <strong>Size:</strong> ${(file.size / 1024).toFixed(2)} KB<br>
+                    <strong>Type:</strong> ${file.type || 'Unknown'}<br>
+                    <strong>Encrypted:</strong> ✓ AES-256<br>
+                    <strong>Password Protected:</strong> ✓
+                `;
+
+                encryptor.showAlert('✅ File encrypted successfully!', 'success');
+
+                // Scroll to result
+                setTimeout(() => {
+                    document.getElementById('resultSection').scrollIntoView({ behavior: 'smooth' });
+                }, 100);
+
+            } catch (error) {
+                encryptor.showAlert('Encryption failed: ' + error.message, 'error');
+                console.error(error);
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        });
+
+        function copyQRLink() {
+            if (encryptedQRData) {
+                encryptor.copyToClipboard(encryptedQRData);
+            }
+        }
+    </script>
+</body>
+
+</html>

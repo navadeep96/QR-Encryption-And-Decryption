@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Decrypt Document - QR Encryptor</title>
+    <link rel="stylesheet" href="../css/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">🔐 QR Encryptor</div>
+            <ul class="nav-links">
+                <li><a href="../index.html">Home</a></li>
+                <li><a href="encrypt.html">Encrypt</a></li>
+                <li><a href="decrypt.html" class="active">Decrypt</a></li>
+                <li><a href="about.html">About</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="page-container">
+        <div class="container">
+            <div id="alert" class="alert"></div>
+
+            <!-- Decryption Form -->
+            <div class="form-section">
+                <h2>🔓 Decrypt Your Document</h2>
+                <p style="color: #666; margin-bottom: 1.5rem;">Paste the encrypted QR data and enter the password to decrypt and download your file.</p>
+
+                <form id="decryptForm">
+                    <!-- QR Data Input -->
+                    <div id="qrInputGroup" class="form-group">
+                        <label for="qrData">Encrypted QR Data</label>
+                        <textarea id="qrData" placeholder="Paste the encrypted QR code data here..." rows="6"></textarea>
+                    </div>
+
+                    <div id="cloudAlert" style="display: none; padding: 1rem; background: #e8f5e9; border-left: 4px solid #4caf50; margin-bottom: 1rem; border-radius: 4px;">
+                        <p style="color: #2e7d32; margin: 0;"><strong>📁 Encrypted File Detected</strong><br>The secure payload has been located. Enter your password below to download and decrypt it.</p>
+                    </div>
+
+                    <!-- Password -->
+                    <div class="form-group">
+                        <label for="decryptPassword">Decryption Password</label>
+                        <input type="password" id="decryptPassword" placeholder="Enter the encryption password" required>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">
+                        🔓 Decrypt & Download
+                    </button>
+                </form>
+
+                <div id="qrHelperInfo">
+                    <div style="margin-top: 2rem; padding: 1rem; background: #f9f9f9; border-radius: 8px; border-left: 4px solid #ffc107;">
+                        <p style="color: #666; margin-bottom: 0.5rem;"><strong>📸 How to get QR data:</strong></p>
+                        <p style="color: #666; font-size: 0.9rem;">
+                            Option 1: Copy the text from the sender<br>
+                            Option 2: Use a QR code scanner to extract the data<br>
+                            Option 3: Upload a QR code image using the button below
+                        </p>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 1rem;">
+                        <label>Or Upload QR Code Image</label>
+                        <div class="file-input-wrapper">
+                            <input type="file" id="qrImageInput" accept="image/*">
+                            <label for="qrImageInput" class="file-input-label">
+                                <span>🖼️</span>
+                                <span>Upload QR Code Image</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Result Section -->
+            <div id="resultSection" class="result-section">
+                <h2>✅ File Decrypted Successfully!</h2>
+                
+                <div id="fileDetails" style="margin: 1.5rem 0; padding: 1rem; background: #f0f7ff; border-radius: 8px;">
+                    <p><strong>📄 File Information:</strong></p>
+                    <p id="detailsText" style="color: #666;"></p>
+                </div>
+
+                <button onclick="downloadDecryptedFile()" class="btn btn-primary" style="width: 100%;">
+                    ⬇️ Download File
+                </button>
+
+                <button onclick="location.reload()" class="btn btn-secondary" style="width: 100%; margin-top: 1rem;">
+                    🔄 Decrypt Another
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>&copy; 2026 QR Document Encryptor. All rights reserved.</p>
+    </footer>
+
+    <script src="../js/encryption.js"></script>
+    <script>
+        let decryptedFileData = null;
+        const urlParams = new URLSearchParams(window.location.search);
+        const cloudBinId = urlParams.get('bin');
+
+        // Check if loaded from QR code scan
+        if (cloudBinId) {
+            document.getElementById('qrInputGroup').style.display = 'none';
+            document.getElementById('qrHelperInfo').style.display = 'none';
+            document.getElementById('cloudAlert').style.display = 'block';
+        }
+
+        document.getElementById('decryptForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            let qrData = document.getElementById('qrData').value.trim();
+            const password = document.getElementById('decryptPassword').value;
+
+            // Check if qrData contains a bin link
+            let extractedBinId = null;
+            if (qrData.includes('?bin=')) {
+                try {
+                    const parsedUrl = new URL(qrData);
+                    extractedBinId = new URLSearchParams(parsedUrl.search).get('bin');
+                } catch (e) {} // Not a valid URL
+            }
+
+            const activeBinId = cloudBinId || extractedBinId;
+
+            if (!qrData && !activeBinId) {
+                encryptor.showAlert('Please enter encrypted QR data or scan a valid URL', 'error');
+                return;
+            }
+
+            if (!password) {
+                encryptor.showAlert('Please enter password', 'error');
+                return;
+            }
+
+            const btn = e.target.querySelector('button[type="submit"]');
+            const originalText = btn.textContent;
+            btn.textContent = '⏳ Fetching & Decrypting...';
+            btn.disabled = true;
+
+            try {
+                // If cloud ID is present (either from URL or extracted), download the payload first
+                let dataToDecrypt = qrData;
+                const activeBinId = cloudBinId || (qrData && qrData.includes('?bin=') ? new URLSearchParams(new URL(qrData).search).get('bin') : null);
+                
+                if (activeBinId) {
+                    btn.textContent = '⏳ Downloading securely...';
+                    dataToDecrypt = await encryptor.downloadEncryptedPayload(activeBinId);
+                    btn.textContent = '⏳ Decrypting...';
+                }
+
+                const decrypted = await encryptor.decryptData(dataToDecrypt, password);
+                decryptedFileData = decrypted;
+
+                // Show file details
+                document.getElementById('detailsText').innerHTML = `
+                    <strong>File:</strong> ${decrypted.metadata.filename}<br>
+                    <strong>Size:</strong> ${(decrypted.metadata.filesize / 1024).toFixed(2)} KB<br>
+                    <strong>Type:</strong> ${decrypted.metadata.filetype || 'Unknown'}<br>
+                    <strong>Timestamp:</strong> ${new Date(decrypted.metadata.timestamp).toLocaleString()}
+                `;
+
+                document.getElementById('resultSection').classList.add('show');
+                encryptor.showAlert('✅ File decrypted successfully!', 'success');
+
+                setTimeout(() => {
+                    document.getElementById('resultSection').scrollIntoView({ behavior: 'smooth' });
+                }, 100);
+
+            } catch (error) {
+                encryptor.showAlert('❌ Decryption Failed: ' + error.message, 'error');
+                console.error(error);
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        });
+
+        function downloadDecryptedFile() {
+            if (decryptedFileData) {
+                encryptor.downloadFile(decryptedFileData);
+                encryptor.showAlert('📥 Download started!', 'success');
+            }
+        }
+
+        // QR Image upload handler
+        document.getElementById('qrImageInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    context.drawImage(img, 0, 0, img.width, img.height);
+                    
+                    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+                    const code = jsQR(imageData.data, imageData.width, imageData.height);
+                    
+                    if (code) {
+                        const decodedText = code.data;
+                        document.getElementById('qrData').value = decodedText;
+                        
+                        // If it's a URL with a bin, auto-trigger the UI
+                        if (decodedText.includes('?bin=')) {
+                            document.getElementById('qrInputGroup').style.display = 'none';
+                            document.getElementById('qrHelperInfo').style.display = 'none';
+                            document.getElementById('cloudAlert').style.display = 'block';
+                            encryptor.showAlert('Secure payload found! Enter your password to download and decrypt.', 'success');
+                        } else {
+                            encryptor.showAlert('QR Code loaded successfully! Enter your password to decrypt.', 'success');
+                        }
+                    } else {
+                        encryptor.showAlert('No QR code found in the image. Please ensure the image is clear or paste the link directly.', 'error');
+                    }
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    </script>
+</body>
+</html>
